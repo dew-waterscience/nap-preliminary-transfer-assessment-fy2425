@@ -1,0 +1,441 @@
+
+<html>
+<head>
+<title>Northern Adelaide Plains preliminary transfer assessment FY24-25</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"
+    integrity="sha256-kLaT2GOSpHechhsozzB+flnD+zUyjE2LlfWPgU04xyI="
+    crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"
+    integrity="sha256-WBkoXOwTeyKclOHuWtc+i2uENFpDZ9YPdf5Hf+D7ewM="
+    crossorigin=""></script>
+<script src="leaflet.geometryutil.js"></script>
+<script src="leaflet-arrowheads.js"></script>
+<script src="leaflet.textpath.js"></script>
+<script src="data.js"></script>
+</head>
+<style>
+body, p, input, li {
+    font-family: Verdana, sans-serif;
+    font-size: 0.95em;
+    line-height: 1.3em;
+}
+button {
+    font-family: Verdana, sans-serif;
+    font-size: 0.95em;
+    line-height: 1.4em;
+}
+div#container { 
+    display: flex; height: 100%; 
+}
+div#left { 
+    width: 26%; 
+}
+div#right { 
+    flex-grow: 1; 
+}
+div#map {
+    width: 100%; 
+    height: 100%; 
+    margin-left: 10px;
+}
+textPath {
+    font-size: 1.2em;
+    text-shadow: white 0 0 4px, white 0 0 6px, white 0 0 8px, white 0 0 10px;
+    font-weight: bold;
+    fill: navy;
+}
+</style>
+<body>
+<script>
+if (window.confirm("This web page provides a preliminary check of whether a transfer application in the T1 and T2 Northern Adelaide Plains (NAP) consumptive pools would be likely to meet Principles 50(b) and 50(c)(i) outlined in Section 7.9 of the Adelaide Plains Water Allocation Plan (WAP). If a licence holder has more than one well, the preliminary result shown here is subject to change per Principle 50(c)(ii).\n\nThe results shown here are indicative only, and do not guarantee that an application would be approved or declined. All applications will require further assessment under the other principles of the WAP and are at the discretion of the Minister’s delegate in accordance with section 125 of the Landscape South Australia Act 2019.\n\nBy continuing, you confirm that you understand this is an indicative check only.")) {
+    //
+} else {
+    window.history.back();
+}
+</script>
+<div id="container">
+<div id="left">
+<p>This web page provides a preliminary and automated check of whether a transfer application in the 
+T1 and T2 Northern Adelaide Plains (NAP) consumptive pools would be likely to meet 
+Principles 50(b) and 50(c)(i) outlined in Section 7.9 of the 
+<a href="https://www.environment.sa.gov.au/topics/water-and-river-murray/projects-planning-and-security/water-security/water-allocation-plans/adelaide-plains-water-allocation-plan">Adelaide Plains Water
+Allocation Plan</a> (WAP). If a licence holder has more than one well, the preliminary result shown here is subject to change per Principle 50(c)(ii).</p>
+<p><b>Disclaimer:</b> The results shown here are indicative only, and do not guarantee that an application would be approved or declined. 
+All applications will require further assessment under the other principles of the WAP and are at the discretion of the Minister’s delegate 
+in accordance with section 125 of the <i>Landscape South Australia Act 2019.</i></p>
+<p><b>How to use:</b>
+<br />Enter well numbers below using a hyphen in the following format:</p>
+    <ul>
+        <li>6628-<i>1234</i></li>
+    </ul>
+   <p>Well numbers in the Northern Adelaide Plains begin with either 6528 or 6628. You can confirm the well number 
+    using <a href="https://www.environment.sa.gov.au/topics/water-and-river-murray/water-licences-allocations-and-markets/mywater-portal">mywater</a>,
+    <a href="https://www.waterconnect.sa.gov.au/Systems/GD/Pages/Default.aspx">Groundwater Data</a>, 
+    or by contacting Water Licensing on (08) 8463 6876.
+</p>
+<p>
+    <b>Transferring from:</b>
+    <br /> Well number: <input type="text" id="wellNumberFrom" />
+</p><p id="aquiferFrom" style="result"></p>
+<p>
+    <b>Transferring to:</b>
+    <br /> Well number: <input type="text" id="wellNumberTo"  />
+</p><p id="aquiferTo" style="result"></p>
+</p>
+<p> 
+	<button onclick="runPrelimAssessment();">Run preliminary assessment</button>
+</p>
+<p><b>Result:</b>
+
+<p id="assessmentResult" style="result">
+</p>
+
+<hr>
+
+<p>To lodge a transfer application please visit the Adelaide and Mount Lofty Ranges 
+<a href="https://www.environment.sa.gov.au/licences-and-permits/water-licence-and-permit-forms/adelaide-and-mount-lofty-ranges-water-licences-and-permits">water licence and permit forms</a>.</p>
+</div>
+    <div id="map"></div>
+</div>
+
+<script>
+
+const successColour = "lightgreen";
+const ambiguousColour = "khaki";
+const failureColour = "lightpink";
+
+const northEastT1Wells = ["6628-26194", "6628-32584", "6628-29281", "6628-31531", "6628-27534"];
+
+var streetMap = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+	maxZoom: 19,
+	attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+})
+var imageMap = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Tiles &copy; <a href='https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9'>Esri</a> &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+})
+
+var assessmentStatus = "draft";
+
+var fromWellIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+var toWellIcon = new L.Icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+var featureFrom;
+var featureTo;
+
+var markerFrom = L.marker([-34.5, 138.5], {icon: fromWellIcon});
+var markerTo = L.marker([-34.5, 138.7], {icon: toWellIcon});
+
+var arrowLine = L.polyline([[-34.5, 138.5], [-34.5, 138.7]]).arrowheads({
+    yawn: 40, 
+    size: "35px", 
+    fill: true
+});
+arrowLine.setStyle({color: "black"});
+
+var potSurfT1 = L.geoJSON(potSurfT1Data, {
+    weight: 2,
+    onEachFeature: function (feature, layer) {
+        var value = feature.properties.ELEV_M_AHD;
+        var valueText = value.toString();
+        layer.setText(valueText, {attributes: {fill: "black"}});
+    }
+});
+
+var potSurfT2 = L.geoJSON(potSurfT2Data, {
+    weight: 2,
+    onEachFeature: function (feature, layer) {
+        var value = feature.properties.ELEV_M_AHD;
+        var valueText = value.toString();
+        layer.setText(valueText, {attributes: {fill: "black"}});
+    }
+});
+
+var extentT1 = L.geoJSON(extentT1Data, {
+    color: "navy",
+    weight: 3,
+    fillOpacity: 0,
+});
+var extentT2 = L.geoJSON(extentT2Data, {
+    color: "navy",
+    weight: 3,
+    fillOpacity: 0,
+});
+
+wellsGroup = L.layerGroup();
+arrowGroup = L.layerGroup();
+extentT1Group = L.layerGroup([extentT1]);
+extentT2Group = L.layerGroup([extentT2]);
+potSurfT1Group = L.layerGroup([potSurfT1]);
+potSurfT2Group = L.layerGroup([potSurfT2]);
+
+var baseMaps = {
+    "Street map": streetMap,
+    "Imagery": imageMap
+};
+
+var overlays = {
+    "T1 NAP consumptive pool": extentT1Group,
+    "T1 potentiometric surface (Feb 2022)": potSurfT1Group,
+    "T2 NAP consumptive pool": extentT2Group,
+    "T2 potentiometric surface (Feb 2022)": potSurfT2Group
+}
+
+var layerControl = L.control.layers(baseMaps, overlays, {collapsed: false});
+
+var map = L.map("map", {
+    layers: [
+        streetMap, 
+        wellsGroup, 
+        arrowGroup,
+    ]
+});
+map.setView([-34.7, 138.62], 12);
+
+layerControl.addTo(map);
+
+var aquiferFromLabel = document.getElementById("aquiferFrom");
+var aquiferToLabel = document.getElementById("aquiferTo");
+var resultElement = document.getElementById("assessmentResult");
+
+function runPrelimAssessment () {
+    clearResults();
+
+    featureFrom = validateFromWell();
+    featureTo = validateToWell();
+    
+    if (featureFrom == false) {
+        setAssessmentResult(-1, "The well which water is being transferred <b>from</b> is not licensed within the T1 or T2 NAP consumptive pools, therefore a transfer application is unlikely to succeed.");
+    } else if (featureTo == false) {
+        setAssessmentResult(-1, "The well which water is being transferred <b>to</b> is not licensed within the T1 or T2 NAP consumptive pools, therefore a transfer application is unlikely to succeed.");
+    } else if ((featureFrom == false) & (featureTo == false)) {
+        setAssessmentResult(-1, "Neither well is licensed, therefore not eligible for a transfer.");
+    } else if ((featureFrom != false) & (featureTo != false)) {
+        // Both wells are valid licensed wells in the NAP T1 and/or T2 consumptive pools.
+        if (featureFrom.properties.well_number == featureTo.properties.well_number ) {
+            // Assessment result: the wells are the same.
+            setAssessmentResult(-1, "Both wells are the same; please enter a different well.");
+        } else if (featureFrom.properties.aquifer != featureTo.properties.aquifer) {
+            // Assessment result: the wells are not in the same pool.
+            setAssessmentResult(-1, "The two wells are not in the same consumptive pool, therefore a transfer application is unlikely to meet Principle 50(b) of the WAP.");
+            arrowGroup.removeLayer(arrowLine);
+        } else {
+            // Assessment result: the wells are in the same pool.
+            arrowLine.setLatLngs([
+                [featureFrom.geometry.coordinates[1], featureFrom.geometry.coordinates[0]],
+                [featureTo.geometry.coordinates[1], featureTo.geometry.coordinates[0]]
+            ]);
+            arrowGroup.addLayer(arrowLine);
+            var aquifer = false;
+            if (featureFrom.properties.aquifer.includes("T1")) {
+                aquifer = "T1";
+            } else if (featureFrom.properties.aquifer.includes("T2")) {
+                aquifer = "T2";
+            }
+            if (aquifer == "T1") {
+                extentT1Group.addTo(map);
+                extentT2Group.remove(map);
+                
+                potSurfT1Group.addTo(map);
+                potSurfT2Group.remove();
+                
+            } else if (aquifer == "T2") {
+                extentT2Group.addTo(map);
+                extentT1Group.remove(map);
+                
+                potSurfT2Group.addTo(map);
+                potSurfT1Group.remove();
+            }
+            
+            rswlFrom = featureFrom.properties.potsurf_rswl;
+            rswlTo = featureTo.properties.potsurf_rswl;
+            
+            // To manually account for the fact that the potentiometric surface does not extend to the wells in the northeast of the T1 NAP consumptive pool,
+            // manually assign these wells an RSWL of 99 m.
+            if (northEastT1Wells.includes(featureFrom.properties.well_number)) {
+                rswlFrom = 99;
+            }
+            if (northEastT1Wells.includes(featureTo.properties.well_number)) {
+                rswlTo = 99;
+            }
+            
+            rswlDiff = rswlTo - rswlFrom;
+            
+            if (rswlFrom != null) {
+                rswlFrom = rswlFrom.toFixed(2)
+            } else {
+                rswlDiff = null;
+            }
+            if (rswlTo != null) {
+                rswlTo = rswlTo.toFixed(2)
+            } else {
+                rswlDiff = null;
+            }
+            if (rswlDiff != null) {
+                rswlDiff = rswlDiff.toFixed(2)
+            }
+            
+            // Provide the RSWL difference to the console.
+            console.log("RSWL change from " + rswlFrom + " mAHD (" + featureFrom.properties.well_number + ") to " + rswlTo + " mAHD (" + featureTo.properties.well_number + "). Δ = " + rswlDiff + " m");
+            
+            // Provide assessment results:
+            if (rswlDiff == null) {
+                setAssessmentResult(-1, "Error. Please contact Water Licensing for further information.");
+            } else if (rswlDiff < -5) {
+                setAssessmentResult(-1, "The transfer is towards an area of lower potentiometric surface, therefore a transfer application is unlikely to meet Principle 50(c)(i) of the WAP.");
+            } else if (rswlDiff <= 0) {
+                setAssessmentResult(0, "The transfer is towards an area of similar potentiometric surface. A transfer application would require further assessment.");
+            } else if (rswlDiff > 0) {
+                setAssessmentResult(1, "The transfer is towards an area of higher potentiometric surface, therefore a transfer application is likely to meet Principle 50(c)(i) of the WAP.");
+            } else {
+                // If one of the wells has an invalid RSWL in the dataset.
+                setAssessmentResult(-1, "Error. Please contact Water Licensing for further information.");
+            }
+        }
+    }
+}
+
+function clearResults () {
+    resultElement.innerHTML = "Please enter well details above and click the button to generate a result.";
+    resultElement.style.backgroundColor = "white";
+    
+    aquiferFromLabel.innerHTML = "";
+    aquiferFromLabel.style.backgroundColor = "white";
+    
+    aquiferToLabel.innerHTML = "";
+    aquiferToLabel.style.backgroundColor = "white";
+    
+    wellsGroup.removeLayer(markerFrom);
+    wellsGroup.removeLayer(markerTo);
+}
+
+function setWellLabelResult (whichWell, ternaryResultIndicator, message) {
+    var color = "white";
+    if (ternaryResultIndicator == true) {
+        color = "white";
+    } else {
+        color = failureColour;
+    }
+    if (whichWell == "From") {
+        aquiferFromLabel.innerHTML = message;
+        aquiferFromLabel.style.backgroundColor = color;
+    } else if (whichWell == "To") {
+        aquiferToLabel.innerHTML = message;
+        aquiferToLabel.style.backgroundColor = color;
+    }
+}
+
+function setAssessmentResult (ternaryResultIndicator, message) {
+    if (ternaryResultIndicator == 1) {
+        resultElement.style.backgroundColor = successColour;
+    } else if (ternaryResultIndicator == 0) {
+        resultElement.style.backgroundColor = ambiguousColour;
+    } else if (ternaryResultIndicator == -1) {
+        resultElement.style.backgroundColor = failureColour;
+    }
+    resultElement.innerHTML = message;
+}
+
+function validateFromWell () {
+    var rawUnitNumber = document.getElementById("wellNumberFrom").value;
+    var validatedUnitNumber = validateUnitNumber(rawUnitNumber);
+    if (validatedUnitNumber == false) {
+        setWellLabelResult("From", false, "Please check the format of the well number entered. It should include a hyphen and begin with either 6528 or 6628.");
+    } else {
+        for (let i = 0; i < wellsData.features.length; i++) {
+            var feature = wellsData.features[i];
+            if (feature.properties.well_number == validatedUnitNumber) {
+                markerFrom.setLatLng([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]);
+                if (setAquiferLabel("From", feature.properties.aquifer)) {
+                    markerFrom.bindPopup("Transferring from " + validatedUnitNumber);
+                    wellsGroup.addLayer(markerFrom);
+                    return feature;
+                }
+            };
+        };
+        setWellLabelResult("From", false, "This is not a licensed well in either the T1 or T2 NAP consumptive pools.");
+    }
+    return false;
+}
+
+function validateToWell () {
+    var rawUnitNumber = document.getElementById("wellNumberTo").value;
+    var validatedUnitNumber = validateUnitNumber(rawUnitNumber);
+    if (validatedUnitNumber == false) {
+        setWellLabelResult("To", false, "Please check the format of the well number entered. It should include a hyphen and begin with either 6528 or 6628.");
+    } else {
+        for (let i = 0; i < wellsData.features.length; i++) {
+            var feature = wellsData.features[i];
+            if (feature.properties.well_number == validatedUnitNumber) {
+                markerTo.setLatLng([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]);
+                if (setAquiferLabel("To", feature.properties.aquifer)) {
+                    markerTo.bindPopup("Transferring to " + validatedUnitNumber);
+                    wellsGroup.addLayer(markerTo);
+                    return feature;
+                }
+            };
+        };
+        setWellLabelResult("To", false, "This is not a licensed well in either the T1 or T2 NAP consumptive pools.");
+    }
+    return false;
+}
+
+function setAquiferLabel(whichWell, aquifer) {
+    var icon_url = "";
+    if (whichWell == "From") {
+        icon_url = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-gold.png";
+    } else if (whichWell == "To") {
+        icon_url = "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png";
+    }
+    if (aquifer.includes("T1")) {
+        setWellLabelResult(whichWell, true, "Licensed T1 NAP well (shown on map with <img height=25px src='" + icon_url + "' />)");
+        return true;
+    } else if (aquifer.includes("T2")) {
+        setWellLabelResult(whichWell, true, "Licensed T2 NAP well (shown on map with <img height=25px src='" + icon_url + "' />)");
+        return true;
+    } else {
+        setWellLabelResult(whichWell, false, "This is not a licensed well in either the T1 or T2 NAP consumptive pools.");
+        return false;
+    };
+}
+
+function validateUnitNumber (text) {
+    if (!text.includes("-")) {
+        console.error("Unit number does not include hyphen. Please enter in hyphenated format. " + text);
+        return false;
+    };
+    var parts = text.split("-");
+    if (!parts.length == 2) {
+        console.error("Unit number should consist of two parts separated by a hyphen. " + parts);
+        return false;
+    };
+    var mapSheet = parts[0];
+    var seqNo = parts[1].replace(/^0+/g, '');
+    if ((mapSheet.length > 0) & (seqNo.length > 0)) {
+        return mapSheet + "-" + seqNo;
+    } else {
+        console.error("Unit number should consist of two numbers separated by a hyphen.")
+        return false;
+    }
+}
+
+clearResults();
+
+</script>
+
+</body>
+</html>
