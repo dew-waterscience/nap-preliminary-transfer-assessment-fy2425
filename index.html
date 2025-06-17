@@ -68,9 +68,10 @@ in accordance with section 125 of the <i>Landscape South Australia Act 2019.</i>
     <ul>
         <li>6628-<i>1234</i></li>
     </ul>
-   <p>Well numbers in the Northern Adelaide Plains begin with either 6528 or 6628. You can confirm the well number 
-    using <a href="https://www.environment.sa.gov.au/topics/water-and-river-murray/water-licences-allocations-and-markets/mywater-portal">mywater</a>,
-    <a href="https://www.waterconnect.sa.gov.au/Systems/GD/Pages/Default.aspx">Groundwater Data</a>, 
+   <p>You can confirm the well number by 
+   turning the "Licensed wells" layer on at the top right
+    <!-- using <a href="https://www.environment.sa.gov.au/topics/water-and-river-murray/water-licences-allocations-and-markets/mywater-portal">mywater</a>, -->
+    <!-- <a href="https://www.waterconnect.sa.gov.au/Systems/GD/Pages/Default.aspx">Groundwater Data</a>,  -->
     or by contacting Water Licensing on (08) 8463 6876.
 </p>
 <p>
@@ -147,6 +148,14 @@ var arrowLine = L.polyline([[-34.5, 138.5], [-34.5, 138.7]]).arrowheads({
 });
 arrowLine.setStyle({color: "black"});
 
+var allWells = L.geoJSON(wellsData, {
+    onEachFeature: function (feature, layer ) {
+        var wellNumber = feature.properties.well_number;
+        var aquifer = feature.properties.aquifer;
+        layer.bindPopup("<b>Well number</b>: " + wellNumber + "<br />" + "<b>Aquifer</b>: " + aquifer);
+    }
+});
+
 var potSurfT1 = L.geoJSON(potSurfT1Data, {
     weight: 2,
     onEachFeature: function (feature, layer) {
@@ -178,6 +187,7 @@ var extentT2 = L.geoJSON(extentT2Data, {
 
 wellsGroup = L.layerGroup();
 arrowGroup = L.layerGroup();
+allWellsGroup = L.layerGroup([allWells]);
 extentT1Group = L.layerGroup([extentT1]);
 extentT2Group = L.layerGroup([extentT2]);
 potSurfT1Group = L.layerGroup([potSurfT1]);
@@ -189,6 +199,7 @@ var baseMaps = {
 };
 
 var overlays = {
+    "All T1 and T2 NAP licensed wells": allWellsGroup,
     "T1 NAP consumptive pool": extentT1Group,
     "T1 potentiometric surface (Feb 2022)": potSurfT1Group,
     "T2 NAP consumptive pool": extentT2Group,
@@ -351,7 +362,7 @@ function setAssessmentResult (ternaryResultIndicator, message) {
 }
 
 function validateFromWell () {
-    var rawUnitNumber = document.getElementById("wellNumberFrom").value;
+    var rawUnitNumber = document.getElementById("wellNumberFrom").value.trim();
     var validatedUnitNumber = validateUnitNumber(rawUnitNumber);
     if (validatedUnitNumber == false) {
         setWellLabelResult("From", false, "Please check the format of the well number entered. It should include a hyphen and begin with either 6528 or 6628.");
@@ -373,7 +384,7 @@ function validateFromWell () {
 }
 
 function validateToWell () {
-    var rawUnitNumber = document.getElementById("wellNumberTo").value;
+    var rawUnitNumber = document.getElementById("wellNumberTo").value.trim();
     var validatedUnitNumber = validateUnitNumber(rawUnitNumber);
     if (validatedUnitNumber == false) {
         setWellLabelResult("To", false, "Please check the format of the well number entered. It should include a hyphen and begin with either 6528 or 6628.");
